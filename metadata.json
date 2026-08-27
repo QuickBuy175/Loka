@@ -1,0 +1,7 @@
+{
+  "name": "Product Seller",
+  "description": "An e-commerce marketplace and inventory selling app for listing products, managing store stock, exploring trending items, and processing orders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
