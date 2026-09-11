@@ -18,18 +18,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -39,6 +47,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -68,13 +77,21 @@ import com.example.ui.util.TelegramHelper
 fun AccountSettingsScreen(
     user: UserEntity?,
     settings: AppSettingsEntity,
+    buyers: List<UserEntity> = emptyList(),
     onOpenAuthDialog: (mode: String) -> Unit,
     onLogout: () -> Unit,
     onUpdateProfile: (UserEntity) -> Unit,
     onUpdateSettings: (AppSettingsEntity) -> Unit,
+    onOpenCreateBuyerDialog: () -> Unit = {},
+    onDeleteBuyer: (Long) -> Unit = {},
+    onSwitchToBuyer: (Long, String) -> Unit = { _, _ -> },
+    onShopProducts: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isLoggedIn = user != null && user.isLoggedIn
+    val isAdmin = isLoggedIn && (user?.isAdmin == true)
+    val isBuyer = isLoggedIn && (user?.isBuyer == true)
 
     // Local form state for settings
     var storeName by remember(settings.storeName) { mutableStateOf(settings.storeName) }
@@ -87,11 +104,12 @@ fun AccountSettingsScreen(
     var orderNotifications by remember(settings.orderNotificationEnabled) { mutableStateOf(settings.orderNotificationEnabled) }
     var autoAccept by remember(settings.autoAcceptOrders) { mutableStateOf(settings.autoAcceptOrders) }
 
-    // Local form state for user profile (when logged in)
-    var fullName by remember(user?.fullName) { mutableStateOf(user?.fullName ?: "") }
-    var userTelegram by remember(user?.telegramUsername) { mutableStateOf(user?.telegramUsername ?: "") }
-    var userPhone by remember(user?.phoneNumber) { mutableStateOf(user?.phoneNumber ?: "") }
-    var userBio by remember(user?.bio) { mutableStateOf(user?.bio ?: "") }
+    // Local form state for admin profile
+    var adminFullName by remember(user?.fullName) { mutableStateOf(user?.fullName ?: "Store Admin") }
+    var adminTelegram by remember(user?.telegramUsername) { mutableStateOf(user?.telegramUsername ?: "apex_support") }
+    var adminPhone by remember(user?.phoneNumber) { mutableStateOf(user?.phoneNumber ?: "+1 (555) 234-5678") }
+    var adminBio by remember(user?.bio) { mutableStateOf(user?.bio ?: "Official Store Administrator & Inventory Curator.") }
+    var buyerShippingAddress by remember(user?.shippingAddress) { mutableStateOf(user?.shippingAddress ?: "") }
 
     Column(
         modifier = modifier
@@ -100,17 +118,21 @@ fun AccountSettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Account Status Header Card
+        // Top Account Status Header Card
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                containerColor = when {
+                    isAdmin -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    isBuyer -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                }
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                if (user != null && user.isLoggedIn) {
-                    // Logged in View
+                if (isAdmin) {
+                    // Admin Logged In View
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -121,11 +143,11 @@ fun AccountSettingsScreen(
                             modifier = Modifier.size(56.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = user.fullName.take(1).uppercase(),
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                Icon(
+                                    imageVector = Icons.Default.AdminPanelSettings,
+                                    contentDescription = "Admin",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
                         }
@@ -135,28 +157,34 @@ fun AccountSettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = user.fullName,
+                                    text = user?.fullName?.ifBlank { "Store Admin" } ?: "Store Admin",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Verified",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Text(
+                                        text = "ADMIN",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                             Text(
-                                text = "@${user.username} • ${user.storeName}",
+                                text = "Administrator • ${settings.storeName}",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Telegram: @${user.telegramUsername.removePrefix("@")}",
+                                text = "Admin Email: ${user?.email ?: "prasith1980@gmail.com"}",
                                 fontSize = 12.sp,
-                                color = Color(0xFF229ED9),
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -168,45 +196,51 @@ fun AccountSettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        Button(
+                            onClick = onOpenCreateBuyerDialog,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .height(44.dp)
+                                .testTag("header_create_buyer_button")
+                        ) {
+                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Create Buyer", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
                         OutlinedButton(
                             onClick = { onLogout() },
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(0.9f)
+                                .height(44.dp)
                                 .testTag("logout_account_button")
                         ) {
-                            Text("Log Out", fontSize = 13.sp)
-                        }
-
-                        Button(
-                            onClick = { onOpenAuthDialog("LOGIN") },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("switch_account_button"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary
-                            )
-                        ) {
-                            Text("Switch Account", fontSize = 13.sp)
+                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Log Out", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                } else {
-                    // Logged out Prompt
+                } else if (isBuyer && user != null) {
+                    // Buyer Logged In View
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(52.dp)
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(56.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    imageVector = Icons.Default.ShoppingBag,
+                                    contentDescription = "Buyer",
+                                    tint = Color.White,
                                     modifier = Modifier.size(28.dp)
                                 )
                             }
@@ -215,17 +249,37 @@ fun AccountSettingsScreen(
                         Spacer(modifier = Modifier.width(14.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = user.fullName.ifBlank { user.username },
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.secondary
+                                ) {
+                                    Text(
+                                        text = "BUYER",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             Text(
-                                text = "Guest / Customer Mode",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = "Registered Customer • @${user.username}",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Log in or create a seller account to edit products, manage store & modify app settings.",
+                                text = "Delivery: ${user.shippingAddress.ifBlank { "Standard Delivery" }}",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 16.sp
+                                maxLines = 1
                             )
                         }
                     }
@@ -237,24 +291,359 @@ fun AccountSettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
-                            onClick = { onOpenAuthDialog("LOGIN") },
+                            onClick = onShopProducts,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
-                                .weight(1f)
-                                .testTag("login_open_button")
+                                .weight(1.3f)
+                                .height(44.dp)
+                                .testTag("buyer_start_shopping_button")
                         ) {
-                            Text("Log In", fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Buy Products Now", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
-                            onClick = { onOpenAuthDialog("REGISTER") },
+                            onClick = { onLogout() },
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
-                                .weight(1f)
-                                .testTag("register_open_button")
+                                .weight(0.9f)
+                                .height(44.dp)
+                                .testTag("logout_buyer_button")
                         ) {
-                            Text("Create Account", fontWeight = FontWeight.Bold)
+                            Text("Sign Out", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+                } else {
+                    // Logged out / Guest View
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Sign In Portal",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Admins can sign in to manage inventory & create buyers. Buyers can sign in to purchase products.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Button(
+                        onClick = { onOpenAuthDialog("LOGIN") },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("login_open_button"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sign In to Account", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // --- BUYER MANAGEMENT SECTION (ONLY VISIBLE FOR ADMIN) ---
+        if (isAdmin) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("admin_buyer_management_card")
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.PersonAdd,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Buyer Accounts & Customers",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Admin can create users to buy products",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = "${buyers.size} Buyers",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Primary Button to Create Buyer
+                    Button(
+                        onClick = onOpenCreateBuyerDialog,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("create_new_buyer_button")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Create New Buyer to Buy Product", fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (buyers.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "No buyer accounts yet",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Click 'Create New Buyer' above to register customers who can purchase products from your store.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            buyers.forEach { buyer ->
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    modifier = Modifier.size(34.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Person,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column {
+                                                    Text(
+                                                        text = buyer.fullName.ifBlank { buyer.username },
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 14.sp,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = "@${buyer.username} • ${buyer.email}",
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+
+                                            IconButton(
+                                                onClick = { onDeleteBuyer(buyer.id) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = "Delete Buyer",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+
+                                        if (buyer.shippingAddress.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Home,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = buyer.shippingAddress,
+                                                    fontSize = 12.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        OutlinedButton(
+                                            onClick = { onSwitchToBuyer(buyer.id, buyer.fullName.ifBlank { buyer.username }) },
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ShoppingBag,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Shop as ${buyer.fullName.ifBlank { buyer.username }}",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- BUYER PROFILE DETAILS (WHEN LOGGED IN AS BUYER) ---
+        if (isBuyer && user != null) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Buyer Delivery Details",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Your default delivery address for instant checkout",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = buyerShippingAddress,
+                        onValueChange = { buyerShippingAddress = it },
+                        label = { Text("Shipping / Delivery Address") },
+                        leadingIcon = { Icon(Icons.Default.Home, contentDescription = null) },
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            val updated = user.copy(shippingAddress = buyerShippingAddress.trim())
+                            onUpdateProfile(updated)
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save Delivery Address", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -277,7 +666,7 @@ fun AccountSettingsScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "App & Store Configuration",
+                        text = "Store Configuration",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -298,6 +687,7 @@ fun AccountSettingsScreen(
                     value = storeName,
                     onValueChange = { storeName = it },
                     label = { Text("Store Display Name") },
+                    enabled = isAdmin,
                     leadingIcon = { Icon(Icons.Default.Storefront, contentDescription = null) },
                     singleLine = true,
                     modifier = Modifier
@@ -312,6 +702,7 @@ fun AccountSettingsScreen(
                     value = storeTagline,
                     onValueChange = { storeTagline = it },
                     label = { Text("Store Tagline / Slogan") },
+                    enabled = isAdmin,
                     leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
                     singleLine = true,
                     modifier = Modifier
@@ -327,6 +718,7 @@ fun AccountSettingsScreen(
                     onValueChange = { telegramUsername = it },
                     label = { Text("Telegram Chat Handle (@username)") },
                     placeholder = { Text("apex_support") },
+                    enabled = isAdmin,
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Send,
@@ -380,6 +772,7 @@ fun AccountSettingsScreen(
                         value = supportEmail,
                         onValueChange = { supportEmail = it },
                         label = { Text("Support Email") },
+                        enabled = isAdmin,
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -388,6 +781,7 @@ fun AccountSettingsScreen(
                         value = supportPhone,
                         onValueChange = { supportPhone = it },
                         label = { Text("Support Phone") },
+                        enabled = isAdmin,
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -406,6 +800,7 @@ fun AccountSettingsScreen(
                         onValueChange = { currencySymbol = it },
                         label = { Text("Currency Symbol") },
                         placeholder = { Text("$") },
+                        enabled = isAdmin,
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -413,6 +808,7 @@ fun AccountSettingsScreen(
                         value = taxRate,
                         onValueChange = { taxRate = it },
                         label = { Text("Tax Rate (%)") },
+                        enabled = isAdmin,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -433,7 +829,8 @@ fun AccountSettingsScreen(
                     }
                     Switch(
                         checked = orderNotifications,
-                        onCheckedChange = { orderNotifications = it },
+                        onCheckedChange = { if (isAdmin) orderNotifications = it },
+                        enabled = isAdmin,
                         modifier = Modifier.testTag("setting_notifications_switch")
                     )
                 }
@@ -451,43 +848,61 @@ fun AccountSettingsScreen(
                     }
                     Switch(
                         checked = autoAccept,
-                        onCheckedChange = { autoAccept = it }
+                        onCheckedChange = { if (isAdmin) autoAccept = it },
+                        enabled = isAdmin
                     )
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                Button(
-                    onClick = {
-                        val parsedTax = taxRate.toDoubleOrNull() ?: 8.0
-                        val updated = settings.copy(
-                            storeName = storeName.trim(),
-                            storeTagline = storeTagline.trim(),
-                            telegramUsername = telegramUsername.trim().removePrefix("@"),
-                            supportEmail = supportEmail.trim(),
-                            supportPhone = supportPhone.trim(),
-                            currencySymbol = currencySymbol.trim().ifBlank { "$" },
-                            taxRate = parsedTax,
-                            orderNotificationEnabled = orderNotifications,
-                            autoAcceptOrders = autoAccept
+                if (isAdmin) {
+                    Button(
+                        onClick = {
+                            val parsedTax = taxRate.toDoubleOrNull() ?: 8.0
+                            val updated = settings.copy(
+                                storeName = storeName.trim(),
+                                storeTagline = storeTagline.trim(),
+                                telegramUsername = telegramUsername.trim().removePrefix("@"),
+                                supportEmail = supportEmail.trim(),
+                                supportPhone = supportPhone.trim(),
+                                currencySymbol = currencySymbol.trim().ifBlank { "$" },
+                                taxRate = parsedTax,
+                                orderNotificationEnabled = orderNotifications,
+                                autoAcceptOrders = autoAccept
+                            )
+                            onUpdateSettings(updated)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("save_settings_button")
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save Store Settings", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(
+                        onClick = { onOpenAuthDialog("LOGIN") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
                         )
-                        onUpdateSettings(updated)
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("save_settings_button")
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Save App & Store Settings", fontWeight = FontWeight.Bold)
+                    ) {
+                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Admin Sign In to Edit Settings", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
 
-        // --- SECTION 2: MERCHANT PROFILE (WHEN LOGGED IN) ---
-        if (user != null && user.isLoggedIn) {
+        // --- SECTION 2: ADMIN PROFILE (WHEN LOGGED IN) ---
+        if (isAdmin && user != null) {
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -504,7 +919,7 @@ fun AccountSettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Merchant Profile",
+                            text = "Admin Profile",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -513,7 +928,7 @@ fun AccountSettingsScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Edit your seller identity displayed on product listings",
+                        text = "Store administrator contact details & bio",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -521,9 +936,9 @@ fun AccountSettingsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedTextField(
-                        value = fullName,
-                        onValueChange = { fullName = it },
-                        label = { Text("Display Name") },
+                        value = adminFullName,
+                        onValueChange = { adminFullName = it },
+                        label = { Text("Admin Full Name") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -532,9 +947,9 @@ fun AccountSettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
-                        value = userTelegram,
-                        onValueChange = { userTelegram = it },
-                        label = { Text("Seller Telegram Handle") },
+                        value = adminTelegram,
+                        onValueChange = { adminTelegram = it },
+                        label = { Text("Admin Telegram Handle") },
                         leadingIcon = { Icon(Icons.Default.Send, contentDescription = null, tint = Color(0xFF229ED9)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -543,9 +958,9 @@ fun AccountSettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
-                        value = userPhone,
-                        onValueChange = { userPhone = it },
-                        label = { Text("Seller Phone Number") },
+                        value = adminPhone,
+                        onValueChange = { adminPhone = it },
+                        label = { Text("Admin Phone Number") },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -554,9 +969,9 @@ fun AccountSettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
-                        value = userBio,
-                        onValueChange = { userBio = it },
-                        label = { Text("Seller Biography / Info") },
+                        value = adminBio,
+                        onValueChange = { adminBio = it },
+                        label = { Text("Admin Biography / Store Info") },
                         maxLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -566,10 +981,10 @@ fun AccountSettingsScreen(
                     Button(
                         onClick = {
                             val updatedUser = user.copy(
-                                fullName = fullName.trim(),
-                                telegramUsername = userTelegram.trim().removePrefix("@"),
-                                phoneNumber = userPhone.trim(),
-                                bio = userBio.trim()
+                                fullName = adminFullName.trim(),
+                                telegramUsername = adminTelegram.trim().removePrefix("@"),
+                                phoneNumber = adminPhone.trim(),
+                                bio = adminBio.trim()
                             )
                             onUpdateProfile(updatedUser)
                         },
@@ -581,7 +996,7 @@ fun AccountSettingsScreen(
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Update Merchant Profile", fontWeight = FontWeight.Bold)
+                        Text("Update Admin Profile", fontWeight = FontWeight.Bold)
                     }
                 }
             }

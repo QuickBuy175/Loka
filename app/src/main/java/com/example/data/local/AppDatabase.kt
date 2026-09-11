@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.AppSettingsEntity
 import com.example.data.model.CartItemEntity
@@ -14,9 +15,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        try {
+            db.execSQL("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'BUYER'")
+            db.execSQL("ALTER TABLE users ADD COLUMN shippingAddress TEXT NOT NULL DEFAULT ''")
+            db.execSQL("UPDATE users SET role = 'ADMIN' WHERE username = 'Admin175' OR email = 'prasith1980@gmail.com' OR username = 'admin'")
+        } catch (_: Exception) {
+            // If columns already exist or table migration handled
+        }
+    }
+}
+
 @Database(
     entities = [ProductEntity::class, CartItemEntity::class, OrderEntity::class, UserEntity::class, AppSettingsEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -37,8 +50,9 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "product_seller_database"
                 )
-                    .addCallback(DatabaseCallback(scope))
+                    .addMigrations(MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
+                    .addCallback(DatabaseCallback(scope))
                     .build()
                 INSTANCE = instance
                 instance
@@ -73,19 +87,37 @@ suspend fun populateInitialData(
 ) {
     if (productDao.getProductCount() > 0) return
 
-    // Seed default admin/seller user
-    val defaultSeller = UserEntity(
-        username = "apex_seller",
-        email = "seller@apexstore.com",
-        password = "password123",
-        fullName = "Alex Mercer",
+    // Seed default admin user
+    val defaultAdmin = UserEntity(
+        username = "Admin175",
+        email = "prasith1980@gmail.com",
+        password = "@1234567",
+        fullName = "Store Admin",
         storeName = "Apex Studio Store",
         telegramUsername = "apex_support",
         phoneNumber = "+1 (555) 234-5678",
-        bio = "Lead Merchant & Curator at Apex Studio. High-grade electronics, fashion & curated accessories.",
+        bio = "Official Store Administrator & Inventory Curator. Manage listings, stock and store settings.",
+        role = "ADMIN",
+        shippingAddress = "Apex Studio Store HQ",
         isLoggedIn = true
     )
-    userDao.insertUser(defaultSeller)
+    userDao.insertUser(defaultAdmin)
+
+    // Seed default buyer user for testing buying products
+    val sampleBuyer = UserEntity(
+        username = "buyer1",
+        email = "buyer@apexstore.com",
+        password = "buy12345",
+        fullName = "Jordan Reed",
+        storeName = "Customer",
+        telegramUsername = "jordan_shopper",
+        phoneNumber = "+1 (555) 888-9900",
+        bio = "Verified customer purchasing premium gear.",
+        role = "BUYER",
+        shippingAddress = "452 Market Street, Suite 300, San Francisco, CA",
+        isLoggedIn = false
+    )
+    userDao.insertUser(sampleBuyer)
 
     // Seed default app/store settings
     val defaultSettings = AppSettingsEntity(
@@ -115,7 +147,7 @@ suspend fun populateInitialData(
             reviewsCount = 128,
             isFeatured = true,
             isListed = true,
-            sellerName = "Apex Studio",
+            sellerName = "Apex Studio Store",
             sellerRating = 4.9,
             salesCount = 54
         ),
@@ -132,7 +164,7 @@ suspend fun populateInitialData(
             reviewsCount = 94,
             isFeatured = true,
             isListed = true,
-            sellerName = "Apex Studio",
+            sellerName = "Apex Studio Store",
             sellerRating = 4.9,
             salesCount = 38
         ),
@@ -149,8 +181,8 @@ suspend fun populateInitialData(
             reviewsCount = 76,
             isFeatured = true,
             isListed = true,
-            sellerName = "Stride Essentials",
-            sellerRating = 4.8,
+            sellerName = "Apex Studio Store",
+            sellerRating = 4.9,
             salesCount = 62
         ),
         ProductEntity(
@@ -166,7 +198,7 @@ suspend fun populateInitialData(
             reviewsCount = 45,
             isFeatured = false,
             isListed = true,
-            sellerName = "Apex Studio",
+            sellerName = "Apex Studio Store",
             sellerRating = 4.9,
             salesCount = 29
         ),
@@ -183,7 +215,7 @@ suspend fun populateInitialData(
             reviewsCount = 112,
             isFeatured = false,
             isListed = true,
-            sellerName = "Apex Studio",
+            sellerName = "Apex Studio Store",
             sellerRating = 4.9,
             salesCount = 47
         ),
@@ -200,8 +232,8 @@ suspend fun populateInitialData(
             reviewsCount = 53,
             isFeatured = false,
             isListed = true,
-            sellerName = "Clay & Stone Co.",
-            sellerRating = 4.7,
+            sellerName = "Apex Studio Store",
+            sellerRating = 4.9,
             salesCount = 81
         ),
         ProductEntity(
@@ -217,7 +249,7 @@ suspend fun populateInitialData(
             reviewsCount = 38,
             isFeatured = false,
             isListed = true,
-            sellerName = "Apex Studio",
+            sellerName = "Apex Studio Store",
             sellerRating = 4.9,
             salesCount = 19
         )

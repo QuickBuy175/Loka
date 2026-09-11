@@ -16,8 +16,18 @@ data class UserEntity(
     val phoneNumber: String = "+1 (555) 234-5678",
     val bio: String = "Official verified merchant specializing in high-grade electronics and modern lifestyle products.",
     val isLoggedIn: Boolean = true,
+    val role: String = "BUYER", // "ADMIN" or "BUYER"
+    val shippingAddress: String = "",
     val createdAt: Long = System.currentTimeMillis()
-)
+) {
+    val isAdmin: Boolean
+        get() = role.equals("ADMIN", ignoreCase = true) ||
+                username.equals("Admin175", ignoreCase = true) ||
+                email.equals("prasith1980@gmail.com", ignoreCase = true)
+
+    val isBuyer: Boolean
+        get() = !isAdmin
+}
 
 @Entity(tableName = "app_settings")
 data class AppSettingsEntity(

@@ -37,6 +37,15 @@ interface UserDao {
 
     @Query("SELECT COUNT(*) FROM users")
     suspend fun getUserCount(): Int
+
+    @Query("SELECT * FROM users WHERE role = 'BUYER' OR (username != 'Admin175' AND email != 'prasith1980@gmail.com' AND username != 'admin' AND email != 'admin@apexstore.com') ORDER BY id DESC")
+    fun getAllBuyers(): Flow<List<UserEntity>>
+
+    @Query("SELECT * FROM users ORDER BY id DESC")
+    fun getAllUsers(): Flow<List<UserEntity>>
+
+    @Query("DELETE FROM users WHERE id = :userId")
+    suspend fun deleteUser(userId: Long)
 }
 
 @Dao

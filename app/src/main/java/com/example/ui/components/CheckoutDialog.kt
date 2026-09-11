@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.CartItemWithProduct
+import com.example.data.model.UserEntity
 import java.util.Locale
 
 @Composable
@@ -61,12 +62,17 @@ fun CheckoutDialog(
     discountAmount: Double,
     estimatedTax: Double,
     totalAmount: Double,
+    currentUser: UserEntity? = null,
     onDismiss: () -> Unit,
     onConfirmOrder: (name: String, address: String, paymentMethod: String) -> Unit
 ) {
-    var name by remember { mutableStateOf("Jordan Reed") }
-    var address by remember { mutableStateOf("452 Market Street, Suite 300, San Francisco, CA") }
-    var phone by remember { mutableStateOf("+1 (555) 234-5678") }
+    val initialName = currentUser?.fullName?.ifBlank { currentUser.username } ?: "Jordan Reed"
+    val initialAddress = currentUser?.shippingAddress?.ifBlank { "452 Market Street, Suite 300, San Francisco, CA" } ?: "452 Market Street, Suite 300, San Francisco, CA"
+    val initialPhone = currentUser?.phoneNumber?.ifBlank { "+1 (555) 234-5678" } ?: "+1 (555) 234-5678"
+
+    var name by remember(currentUser) { mutableStateOf(initialName) }
+    var address by remember(currentUser) { mutableStateOf(initialAddress) }
+    var phone by remember(currentUser) { mutableStateOf(initialPhone) }
     var selectedPaymentMethod by remember { mutableStateOf("Credit Card (•••• 4242)") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -142,12 +148,32 @@ fun CheckoutDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Customer Information
-                Text(
-                    text = "Shipping Information",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Shipping Information",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (currentUser != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = if (currentUser.isBuyer) "Buyer Account" else "Admin Order",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(

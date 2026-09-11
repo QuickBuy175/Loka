@@ -21,16 +21,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.TrendingUp
@@ -41,12 +46,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +74,7 @@ fun SellerHubScreen(
     sellerStats: SellerStats,
     products: List<ProductEntity>,
     user: UserEntity?,
+    buyers: List<UserEntity> = emptyList(),
     onAddProductClick: () -> Unit,
     onEditProductClick: (ProductEntity) -> Unit,
     onDeleteProductClick: (Long) -> Unit,
@@ -76,8 +82,13 @@ fun SellerHubScreen(
     onToggleListing: (id: Long, currentStatus: Boolean) -> Unit,
     onOpenAuthDialog: (String) -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenCreateBuyerDialog: () -> Unit = {},
+    onDeleteBuyer: (Long) -> Unit = {},
+    onSwitchToBuyer: (Long, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
+    val isAdmin = user != null && user.isLoggedIn
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -85,12 +96,12 @@ fun SellerHubScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Seller Account Status Banner
+        // Admin Status Banner
         item {
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = if (isAdmin) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -105,37 +116,54 @@ fun SellerHubScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (user != null && user.isLoggedIn) user.storeName else "Seller Studio Dashboard",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            if (user != null && user.isLoggedIn) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Logged in as ${user.fullName} • Telegram: @${user.telegramUsername.removePrefix("@")}",
+                                    text = if (isAdmin) "Store Admin Dashboard" else "Store Admin Panel",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAdmin) Color.White else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isAdmin) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color.White.copy(alpha = 0.25f)
+                                    ) {
+                                        Text(
+                                            text = "ADMIN",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            if (isAdmin) {
+                                Text(
+                                    text = "Logged in as ${user?.fullName ?: "Admin"} • Telegram: @${(user?.telegramUsername ?: "apex_support").removePrefix("@")}",
                                     fontSize = 12.sp,
                                     color = Color.White.copy(alpha = 0.9f)
                                 )
                             } else {
                                 Text(
-                                    text = "Manage your product catalog & store settings",
+                                    text = "Only the Store Administrator can add or edit sale products",
                                     fontSize = 12.sp,
-                                    color = Color.White.copy(alpha = 0.85f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
                         Surface(
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.2f),
+                            color = if (isAdmin) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(44.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.Storefront,
-                                    contentDescription = "Seller Store",
-                                    tint = Color.White
+                                    imageVector = if (isAdmin) Icons.Default.AdminPanelSettings else Icons.Default.Security,
+                                    contentDescription = "Admin Security",
+                                    tint = if (isAdmin) Color.White else MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -143,60 +171,107 @@ fun SellerHubScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                if (user != null && user.isLoggedIn) {
-                                    onAddProductClick()
-                                } else {
-                                    onOpenAuthDialog("LOGIN")
+                    if (isAdmin) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = onAddProductClick,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("list_new_product_button"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.White,
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Add Product",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
                                 }
-                            },
+
+                                Button(
+                                    onClick = onOpenCreateBuyerDialog,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("hub_create_buyer_button"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.White.copy(alpha = 0.95f),
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PersonAdd,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Create Buyer",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = onOpenSettings,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .testTag("hub_open_settings_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Store Settings & Account",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { onOpenAuthDialog("LOGIN") },
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .height(46.dp)
-                                .testTag("list_new_product_button"),
+                                .testTag("admin_login_hub_button"),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = MaterialTheme.colorScheme.primary
+                                containerColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
                             Icon(
-                                imageVector = Icons.Default.AddCircle,
+                                imageVector = Icons.Default.AdminPanelSettings,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "List New Product",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = onOpenSettings,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .testTag("hub_open_settings_button"),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Store Settings",
+                                text = "Admin Log In to Edit Sale Products",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
                             )
@@ -210,7 +285,7 @@ fun SellerHubScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Performance Overview",
+                    text = "Store Performance Overview",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -224,15 +299,16 @@ fun SellerHubScreen(
                         title = "Total Sales",
                         value = String.format(Locale.US, "$%.2f", sellerStats.totalRevenue),
                         icon = Icons.Default.AttachMoney,
-                        iconTint = MaterialTheme.colorScheme.tertiary,
+                        containerColor = Color(0xFFE8F5E9),
+                        iconTint = Color(0xFF2E7D32),
                         modifier = Modifier.weight(1f)
                     )
-
                     StatCard(
                         title = "Orders Placed",
                         value = "${sellerStats.totalOrders}",
                         icon = Icons.Default.ShoppingCart,
-                        iconTint = MaterialTheme.colorScheme.primary,
+                        containerColor = Color(0xFFE3F2FD),
+                        iconTint = Color(0xFF1565C0),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -243,55 +319,322 @@ fun SellerHubScreen(
                 ) {
                     StatCard(
                         title = "Active Listings",
-                        value = "${sellerStats.activeListings} items",
+                        value = "${sellerStats.activeListings}",
                         icon = Icons.Default.Inventory2,
-                        iconTint = MaterialTheme.colorScheme.secondary,
+                        containerColor = Color(0xFFFFF3E0),
+                        iconTint = Color(0xFFE65100),
                         modifier = Modifier.weight(1f)
                     )
-
                     StatCard(
-                        title = "Total In Stock",
+                        title = "Stock in Hand",
                         value = "${sellerStats.totalInventoryCount} units",
                         icon = Icons.Default.Inventory,
-                        iconTint = Color(0xFF6366F1),
+                        containerColor = Color(0xFFF3E5F5),
+                        iconTint = Color(0xFF7B1FA2),
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
         }
 
-        // Inventory Management Header
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Product Inventory (${products.size})",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Quick Stock Controls",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        // Customer & Buyer Management Section (Admin Only)
+        if (isAdmin) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("hub_buyer_management_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.PersonAdd,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Buyer Accounts & Customers",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Admin can create users to buy products",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = onOpenCreateBuyerDialog,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .testTag("hub_add_buyer_small_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("New Buyer", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (buyers.isEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "No buyer accounts yet",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Create buyer accounts so customers can log in to buy products from your store.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                buyers.take(4).forEach { buyer ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Person,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text(
+                                                        text = buyer.fullName.ifBlank { buyer.username },
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = "@${buyer.username} • ${buyer.email}",
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                OutlinedButton(
+                                                    onClick = { onSwitchToBuyer(buyer.id, buyer.fullName.ifBlank { buyer.username }) },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.height(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.ShoppingBag,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Shop as Buyer", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                IconButton(
+                                                    onClick = { onDeleteBuyer(buyer.id) },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.DeleteOutline,
+                                                        contentDescription = "Delete Buyer",
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (buyers.size > 4) {
+                                    TextButton(
+                                        onClick = onOpenSettings,
+                                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                                    ) {
+                                        Text(
+                                            text = "View all ${buyers.size} buyers in Settings →",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // Product Items in Inventory
-        items(products, key = { it.id }) { product ->
-            InventoryItemCard(
-                product = product,
-                onEditClick = { onEditProductClick(product) },
-                onDeleteClick = { onDeleteProductClick(product.id) },
-                onUpdateStock = { delta -> onUpdateStock(product.id, product.stockQuantity + delta) },
-                onToggleListing = { onToggleListing(product.id, product.isListed) }
-            )
+        // Products Inventory Management Section Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Product Inventory (${products.size})",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isAdmin) "Tap photo or edit button to update product details" else "Admin log in required to edit products",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (isAdmin) {
+                    Button(
+                        onClick = onAddProductClick,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Inventory Items List
+        if (products.isEmpty()) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Inventory2,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No products found",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Add products to populate the store catalog.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else {
+            items(products, key = { it.id }) { product ->
+                InventoryItemCard(
+                    product = product,
+                    isAdmin = isAdmin,
+                    onEditClick = {
+                        if (isAdmin) {
+                            onEditProductClick(product)
+                        } else {
+                            onOpenAuthDialog("LOGIN")
+                        }
+                    },
+                    onDeleteClick = {
+                        if (isAdmin) {
+                            onDeleteProductClick(product.id)
+                        } else {
+                            onOpenAuthDialog("LOGIN")
+                        }
+                    },
+                    onUpdateStock = { delta ->
+                        if (isAdmin) {
+                            val newStock = (product.stockQuantity + delta).coerceAtLeast(0)
+                            onUpdateStock(product.id, newStock)
+                        } else {
+                            onOpenAuthDialog("LOGIN")
+                        }
+                    },
+                    onToggleListing = {
+                        if (isAdmin) {
+                            onToggleListing(product.id, product.isListed)
+                        } else {
+                            onOpenAuthDialog("LOGIN")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -301,22 +644,16 @@ private fun StatCard(
     title: String,
     value: String,
     icon: ImageVector,
+    containerColor: Color,
     iconTint: Color,
     modifier: Modifier = Modifier
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-        ) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -325,8 +662,8 @@ private fun StatCard(
                 Text(
                     text = title,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Surface(
                     shape = CircleShape,
@@ -357,6 +694,7 @@ private fun StatCard(
 @Composable
 private fun InventoryItemCard(
     product: ProductEntity,
+    isAdmin: Boolean,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onUpdateStock: (delta: Int) -> Unit,
@@ -381,11 +719,13 @@ private fun InventoryItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Image Thumbnail
+                // Image Thumbnail with Edit Photo affordance
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(68.dp)
                         .clip(RoundedCornerShape(12.dp))
+                        .clickable { onEditClick() }
+                        .testTag("inventory_item_photo_${product.id}")
                 ) {
                     ProductImage(
                         imageResName = product.imageResName,
@@ -393,6 +733,26 @@ private fun InventoryItemCard(
                         contentDescription = product.title,
                         modifier = Modifier.matchParentSize()
                     )
+                    // Camera icon badge
+                    if (isAdmin) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.65f),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(3.dp)
+                                .size(20.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoCamera,
+                                    contentDescription = "Change Image",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -423,29 +783,43 @@ private fun InventoryItemCard(
                     }
                 }
 
-                // Edit & Delete actions
-                IconButton(
-                    onClick = onEditClick,
-                    modifier = Modifier.testTag("edit_product_${product.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit Product",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                if (isAdmin) {
+                    // Edit & Delete actions
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.testTag("edit_product_${product.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Product",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.testTag("delete_product_${product.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete Product",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.testTag("delete_product_${product.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Delete Product",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.testTag("lock_product_${product.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Admin Only",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
@@ -464,6 +838,7 @@ private fun InventoryItemCard(
                     Switch(
                         checked = product.isListed,
                         onCheckedChange = { onToggleListing() },
+                        enabled = isAdmin,
                         modifier = Modifier.testTag("toggle_listing_${product.id}")
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -487,7 +862,7 @@ private fun InventoryItemCard(
                 ) {
                     IconButton(
                         onClick = { onUpdateStock(-1) },
-                        enabled = product.stockQuantity > 0,
+                        enabled = isAdmin && product.stockQuantity > 0,
                         modifier = Modifier
                             .size(28.dp)
                             .testTag("decrease_stock_${product.id}")
@@ -508,6 +883,7 @@ private fun InventoryItemCard(
 
                     IconButton(
                         onClick = { onUpdateStock(1) },
+                        enabled = isAdmin,
                         modifier = Modifier
                             .size(28.dp)
                             .testTag("increase_stock_${product.id}")

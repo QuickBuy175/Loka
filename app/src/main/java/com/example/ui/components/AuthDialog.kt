@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AlternateEmail
-import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -34,19 +33,16 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,9 +62,10 @@ import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun AuthDialog(
-    initialMode: String = "LOGIN", // "LOGIN" or "REGISTER"
+    initialMode: String = "LOGIN",
     onDismiss: () -> Unit,
     onLogin: (identifier: String, password: String, onResult: (Boolean, String) -> Unit) -> Unit,
+    onResetPassword: (email: String, newPassword: String, onResult: (Boolean, String) -> Unit) -> Unit = { _, _, cb -> cb(true, "Password updated") },
     onRegister: (
         username: String,
         email: String,
@@ -79,27 +76,22 @@ fun AuthDialog(
         phoneNumber: String,
         bio: String,
         onResult: (Boolean, String) -> Unit
-    ) -> Unit
+    ) -> Unit = { _, _, _, _, _, _, _, _, cb -> cb(false, "Registration is disabled. Only Admin access is supported.") }
 ) {
-    var selectedTab by remember { mutableIntStateOf(if (initialMode == "REGISTER") 1 else 0) }
+    var isResetMode by remember { mutableStateOf(false) }
 
-    // Login Form State
+    // Admin Login Form State
     var loginIdentifier by remember { mutableStateOf("") }
     var loginPassword by remember { mutableStateOf("") }
     var showLoginPassword by remember { mutableStateOf(false) }
 
-    // Register Form State
-    var regFullName by remember { mutableStateOf("") }
-    var regUsername by remember { mutableStateOf("") }
-    var regEmail by remember { mutableStateOf("") }
-    var regPassword by remember { mutableStateOf("") }
-    var regStoreName by remember { mutableStateOf("") }
-    var regTelegram by remember { mutableStateOf("") }
-    var regPhone by remember { mutableStateOf("") }
-    var regBio by remember { mutableStateOf("") }
-    var showRegPassword by remember { mutableStateOf(false) }
+    // Password Reset Form State
+    var resetEmail by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var showNewPassword by remember { mutableStateOf(false) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
     Dialog(
@@ -108,7 +100,7 @@ fun AuthDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
+                .fillMaxWidth(0.92f)
                 .clip(RoundedCornerShape(24.dp))
                 .testTag("auth_dialog"),
             color = MaterialTheme.colorScheme.surface,
@@ -118,425 +110,391 @@ fun AuthDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
+                    .padding(24.dp)
             ) {
-                // Header
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f))
-                        .padding(20.dp)
+                // Header with Admin Shield Icon and Close Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isResetMode) Icons.Default.LockReset else Icons.Default.AdminPanelSettings,
+                                    contentDescription = "Admin Security",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column {
+                            Text(
+                                text = if (isResetMode) "Reset Password" else "Account Sign In",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isResetMode) "Verify with admin email" else "Admin Portal & Buyer Access",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("close_auth_dialog")
+                    ) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Informational Notice: Roles
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(44.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Storefront,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = if (selectedTab == 0) "Seller Account Login" else "Create Seller Account",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Manage your store, products & settings",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = if (isResetMode)
+                                "Enter your registered administrator email to verify identity and reset your store password."
+                            else
+                                "Admins can sign in to manage inventory & create buyers. Registered buyers can sign in to buy products.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
 
-                        IconButton(
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                if (successMessage != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = successMessage!!,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                if (!isResetMode) {
+                    // --- SIGN IN MODE ---
+                    // Identifier Field (Username or Email)
+                    OutlinedTextField(
+                        value = loginIdentifier,
+                        onValueChange = {
+                            loginIdentifier = it
+                            errorMessage = null
+                            successMessage = null
+                        },
+                        label = { Text("Username or Email") },
+                        placeholder = { Text("Enter username or email") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_login_identifier"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Password Field
+                    OutlinedTextField(
+                        value = loginPassword,
+                        onValueChange = {
+                            loginPassword = it
+                            errorMessage = null
+                            successMessage = null
+                        },
+                        label = { Text("Password") },
+                        placeholder = { Text("Enter account password") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { showLoginPassword = !showLoginPassword }) {
+                                Icon(
+                                    imageVector = if (showLoginPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showLoginPassword) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        visualTransformation = if (showLoginPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_login_password"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Forgot / Reset Password toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                isResetMode = true
+                                errorMessage = null
+                                successMessage = null
+                            }
+                        ) {
+                            Text(
+                                text = "Reset password with email",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
                             onClick = onDismiss,
                             modifier = Modifier
-                                .size(32.dp)
-                                .testTag("close_auth_dialog_button")
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("Cancel")
                         }
-                    }
-                }
-
-                // Tab Switcher
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = {
-                            selectedTab = 0
-                            errorMessage = null
-                        },
-                        text = {
-                            Text(
-                                "Log In",
-                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 14.sp
-                            )
-                        },
-                        modifier = Modifier.testTag("tab_login")
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = {
-                            selectedTab = 1
-                            errorMessage = null
-                        },
-                        text = {
-                            Text(
-                                "Create Account",
-                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 14.sp
-                            )
-                        },
-                        modifier = Modifier.testTag("tab_register")
-                    )
-                }
-
-                // Form Body
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
-                ) {
-                    if (errorMessage != null) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                        ) {
-                            Text(
-                                text = errorMessage ?: "",
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-                    }
-
-                    if (selectedTab == 0) {
-                        // --- LOGIN FORM ---
-                        Text(
-                            text = "Sign in with your seller account credentials:",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        OutlinedTextField(
-                            value = loginIdentifier,
-                            onValueChange = { loginIdentifier = it },
-                            label = { Text("Email or Username") },
-                            placeholder = { Text("seller@apexstore.com") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Person, contentDescription = null)
-                            },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("login_identifier_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = loginPassword,
-                            onValueChange = { loginPassword = it },
-                            label = { Text("Password") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Lock, contentDescription = null)
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { showLoginPassword = !showLoginPassword }) {
-                                    Icon(
-                                        imageVector = if (showLoginPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = "Toggle password"
-                                    )
-                                }
-                            },
-                            visualTransformation = if (showLoginPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("login_password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(20.dp))
 
                         Button(
                             onClick = {
-                                isLoading = true
-                                errorMessage = null
-                                onLogin(loginIdentifier, loginPassword) { success, msg ->
-                                    isLoading = false
-                                    if (!success) {
-                                        errorMessage = msg
-                                    }
-                                }
-                            },
-                            enabled = !isLoading && loginIdentifier.isNotBlank() && loginPassword.isNotBlank(),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("submit_login_button")
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text("Log In to Edit Store", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider()
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Demo Quick Login Card
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Text(
-                                    text = "Quick Demo Account:",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Email: seller@apexstore.com  |  Pass: password123",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                OutlinedButton(
-                                    onClick = {
-                                        loginIdentifier = "seller@apexstore.com"
-                                        loginPassword = "password123"
-                                        isLoading = true
-                                        onLogin("seller@apexstore.com", "password123") { success, msg ->
-                                            isLoading = false
-                                            if (!success) errorMessage = msg
+                                if (loginIdentifier.isBlank() || loginPassword.isBlank()) {
+                                    errorMessage = "Please enter admin username/email and password."
+                                } else {
+                                    isLoading = true
+                                    errorMessage = null
+                                    successMessage = null
+                                    onLogin(loginIdentifier, loginPassword) { success, message ->
+                                        isLoading = false
+                                        if (!success) {
+                                            errorMessage = message
                                         }
-                                    },
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("quick_demo_login_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Key,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("1-Tap Demo Seller Login", fontSize = 13.sp)
-                                }
-                            }
-                        }
-
-                    } else {
-                        // --- REGISTER FORM ---
-                        Text(
-                            text = "Set up your merchant identity & store profile:",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        OutlinedTextField(
-                            value = regFullName,
-                            onValueChange = { regFullName = it },
-                            label = { Text("Full Name *") },
-                            placeholder = { Text("e.g. Alex Mercer") },
-                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_fullname_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regStoreName,
-                            onValueChange = { regStoreName = it },
-                            label = { Text("Store / Brand Name *") },
-                            placeholder = { Text("e.g. Apex Tech Goods") },
-                            leadingIcon = { Icon(Icons.Default.Storefront, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_storename_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regTelegram,
-                            onValueChange = { regTelegram = it },
-                            label = { Text("Telegram Username (for product chat) *") },
-                            placeholder = { Text("e.g. apex_seller") },
-                            leadingIcon = { Icon(Icons.Default.Send, contentDescription = null, tint = Color(0xFF229ED9)) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_telegram_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regEmail,
-                            onValueChange = { regEmail = it },
-                            label = { Text("Email Address *") },
-                            placeholder = { Text("seller@yourstore.com") },
-                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_email_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regUsername,
-                            onValueChange = { regUsername = it },
-                            label = { Text("Account Username *") },
-                            placeholder = { Text("alex_seller") },
-                            leadingIcon = { Icon(Icons.Default.AlternateEmail, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_username_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regPassword,
-                            onValueChange = { regPassword = it },
-                            label = { Text("Password *") },
-                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                            trailingIcon = {
-                                IconButton(onClick = { showRegPassword = !showRegPassword }) {
-                                    Icon(
-                                        imageVector = if (showRegPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = "Toggle password"
-                                    )
-                                }
-                            },
-                            visualTransformation = if (showRegPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("register_password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regPhone,
-                            onValueChange = { regPhone = it },
-                            label = { Text("Support Phone (Optional)") },
-                            placeholder = { Text("+1 555-0192") },
-                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = regBio,
-                            onValueChange = { regBio = it },
-                            label = { Text("Store Bio / Description") },
-                            placeholder = { Text("Specializing in premium gear & fast delivery.") },
-                            maxLines = 3,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Button(
-                            onClick = {
-                                isLoading = true
-                                errorMessage = null
-                                onRegister(
-                                    regUsername,
-                                    regEmail,
-                                    regPassword,
-                                    regFullName,
-                                    regStoreName,
-                                    regTelegram,
-                                    regPhone,
-                                    regBio
-                                ) { success, msg ->
-                                    isLoading = false
-                                    if (!success) {
-                                        errorMessage = msg
                                     }
                                 }
                             },
-                            enabled = !isLoading &&
-                                    regFullName.isNotBlank() &&
-                                    regUsername.isNotBlank() &&
-                                    regEmail.isNotBlank() &&
-                                    regPassword.isNotBlank(),
-                            shape = RoundedCornerShape(12.dp),
+                            enabled = !isLoading,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("submit_register_button")
+                                .weight(1.3f)
+                                .height(48.dp)
+                                .testTag("submit_login_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(
-                                    color = Color.White,
                                     modifier = Modifier.size(20.dp),
+                                    color = Color.White,
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text("Create Account & Enter Store", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text(
+                                    text = "Log In as Admin",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // --- RESET PASSWORD MODE ---
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = {
+                            resetEmail = it
+                            errorMessage = null
+                            successMessage = null
+                        },
+                        label = { Text("Registered Admin Email") },
+                        placeholder = { Text("e.g. prasith1980@gmail.com") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Email,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_reset_email"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = {
+                            newPassword = it
+                            errorMessage = null
+                            successMessage = null
+                        },
+                        label = { Text("New Admin Password") },
+                        placeholder = { Text("Enter new password") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { showNewPassword = !showNewPassword }) {
+                                Icon(
+                                    imageVector = if (showNewPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showNewPassword) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_reset_new_password"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                isResetMode = false
+                                errorMessage = null
+                                successMessage = null
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Back")
+                        }
+
+                        Button(
+                            onClick = {
+                                if (resetEmail.isBlank()) {
+                                    errorMessage = "Please enter your registered admin email."
+                                } else if (newPassword.isBlank()) {
+                                    errorMessage = "Please enter a new password."
+                                } else {
+                                    isLoading = true
+                                    errorMessage = null
+                                    successMessage = null
+                                    onResetPassword(resetEmail, newPassword) { success, msg ->
+                                        isLoading = false
+                                        if (success) {
+                                            successMessage = msg
+                                            loginIdentifier = resetEmail
+                                            loginPassword = newPassword
+                                            isResetMode = false
+                                        } else {
+                                            errorMessage = msg
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isLoading,
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .height(48.dp)
+                                .testTag("submit_reset_password_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = "Update Password",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
                             }
                         }
                     }
@@ -545,3 +503,4 @@ fun AuthDialog(
         }
     }
 }
+

@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 
 enum class AppTab(val title: String) {
     SHOP("Market"),
-    SELLER_HUB("Seller Hub"),
+    SELLER_HUB("Admin Hub"),
     CART("Cart"),
     ORDERS("Orders"),
     SETTINGS("Settings")
@@ -48,6 +48,7 @@ data class UiState(
     val lastPlacedOrder: OrderEntity? = null,
     val isOrderSuccessDialogOpen: Boolean = false,
     val isAuthDialogOpen: Boolean = false,
+    val isCreateBuyerDialogOpen: Boolean = false,
     val authDialogMode: String = "LOGIN",
     val snackbarMessage: String? = null
 )
@@ -84,6 +85,9 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     val loggedInUser: StateFlow<UserEntity?> = repository.loggedInUser
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val buyers: StateFlow<List<UserEntity>> = repository.allBuyers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val appSettings: StateFlow<AppSettingsEntity?> = repository.appSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -138,6 +142,62 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(isAuthDialogOpen = false) }
     }
 
+    fun openCreateBuyerDialog() {
+        _uiState.update { it.copy(isCreateBuyerDialogOpen = true) }
+    }
+
+    fun closeCreateBuyerDialog() {
+        _uiState.update { it.copy(isCreateBuyerDialogOpen = false) }
+    }
+
+    fun createBuyerUser(
+        fullName: String,
+        username: String,
+        email: String,
+        password: String,
+        phoneNumber: String,
+        shippingAddress: String,
+        loginImmediately: Boolean,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.createBuyerUser(
+                fullName = fullName,
+                username = username,
+                email = email,
+                password = password,
+                phoneNumber = phoneNumber,
+                shippingAddress = shippingAddress,
+                loginImmediately = loginImmediately
+            )
+            if (result.first) {
+                _uiState.update { it.copy(isCreateBuyerDialogOpen = false) }
+                if (loginImmediately) {
+                    _uiState.update { it.copy(currentTab = AppTab.SHOP) }
+                    showSnackbar("Logged in as buyer '${fullName.ifBlank { username }}'. Ready to buy products!")
+                } else {
+                    showSnackbar(result.second)
+                }
+            }
+            onResult(result.first, result.second)
+        }
+    }
+
+    fun deleteBuyerUser(userId: Long) {
+        viewModelScope.launch {
+            val result = repository.deleteBuyerUser(userId)
+            showSnackbar(result.second)
+        }
+    }
+
+    fun switchToUser(userId: Long, userName: String) {
+        viewModelScope.launch {
+            repository.switchToUser(userId)
+            _uiState.update { it.copy(currentTab = AppTab.SHOP) }
+            showSnackbar("Switched session to '$userName'. Happy shopping!")
+        }
+    }
+
     fun loginUser(username: String, password: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             val user = repository.authenticateUser(username, password)
@@ -146,8 +206,18 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
                 showSnackbar("Welcome back, ${user.fullName.ifBlank { user.username }}!")
                 onResult(true, "Logged in successfully")
             } else {
-                onResult(false, "Invalid username or password")
+                onResult(false, "Invalid username/email or password.")
             }
+        }
+    }
+
+    fun resetPasswordByEmail(email: String, newPassword: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.resetPasswordByEmail(email, newPassword)
+            if (result.first) {
+                showSnackbar(result.second)
+            }
+            onResult(result.first, result.second)
         }
     }
 

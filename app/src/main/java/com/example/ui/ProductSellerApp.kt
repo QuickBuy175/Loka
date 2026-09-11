@@ -17,7 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
@@ -62,6 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.AddEditProductDialog
 import com.example.ui.components.AuthDialog
 import com.example.ui.components.CheckoutDialog
+import com.example.ui.components.CreateBuyerDialog
 import com.example.ui.components.OrderSuccessDialog
 import com.example.ui.components.ProductDetailDialog
 import com.example.ui.screens.AccountSettingsScreen
@@ -83,6 +86,7 @@ fun ProductSellerApp(
     val sellerStats by viewModel.sellerStats.collectAsStateWithLifecycle()
     val loggedInUser by viewModel.loggedInUser.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
+    val buyers by viewModel.buyers.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -129,19 +133,22 @@ fun ProductSellerApp(
                     }
                 },
                 navigationIcon = {
-                    // Profile / Auth Status indicator button
+                    val isUserLoggedIn = loggedInUser != null && loggedInUser!!.isLoggedIn
+                    val isUserAdmin = isUserLoggedIn && (loggedInUser?.isAdmin == true)
+                    val isUserBuyer = isUserLoggedIn && (loggedInUser?.isBuyer == true)
+
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = if (loggedInUser != null && loggedInUser!!.isLoggedIn) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
+                        color = when {
+                            isUserAdmin -> MaterialTheme.colorScheme.primaryContainer
+                            isUserBuyer -> MaterialTheme.colorScheme.secondaryContainer
+                            else -> MaterialTheme.colorScheme.surfaceVariant
                         },
                         modifier = Modifier
                             .padding(start = 12.dp)
                             .testTag("top_auth_status_button")
                             .clickable {
-                                if (loggedInUser != null && loggedInUser!!.isLoggedIn) {
+                                if (isUserLoggedIn) {
                                     viewModel.setTab(AppTab.SETTINGS)
                                 } else {
                                     viewModel.openAuthDialog("LOGIN")
@@ -153,21 +160,33 @@ fun ProductSellerApp(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Icon(
-                                imageVector = if (loggedInUser != null && loggedInUser!!.isLoggedIn) Icons.Default.Person else Icons.Default.AccountCircle,
+                                imageVector = when {
+                                    isUserAdmin -> Icons.Default.AdminPanelSettings
+                                    isUserBuyer -> Icons.Default.Person
+                                    else -> Icons.Default.Lock
+                                },
                                 contentDescription = "Account",
-                                tint = if (loggedInUser != null && loggedInUser!!.isLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = when {
+                                    isUserAdmin -> MaterialTheme.colorScheme.primary
+                                    isUserBuyer -> MaterialTheme.colorScheme.secondary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (loggedInUser != null && loggedInUser!!.isLoggedIn) {
-                                    loggedInUser!!.username.take(8)
-                                } else {
-                                    "Log In"
+                                text = when {
+                                    isUserAdmin -> "Admin"
+                                    isUserBuyer -> loggedInUser?.fullName?.take(8) ?: "Buyer"
+                                    else -> "Sign In"
                                 },
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (loggedInUser != null && loggedInUser!!.isLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    isUserAdmin -> MaterialTheme.colorScheme.primary
+                                    isUserBuyer -> MaterialTheme.colorScheme.secondary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
@@ -366,13 +385,19 @@ fun ProductSellerApp(
                         sellerStats = sellerStats,
                         products = allProducts,
                         user = loggedInUser,
+                        buyers = buyers,
                         onAddProductClick = viewModel::openAddProductDialog,
                         onEditProductClick = viewModel::openEditProductDialog,
                         onDeleteProductClick = viewModel::deleteProduct,
                         onUpdateStock = viewModel::updateStock,
                         onToggleListing = viewModel::toggleListingStatus,
                         onOpenAuthDialog = viewModel::openAuthDialog,
-                        onOpenSettings = { viewModel.setTab(AppTab.SETTINGS) }
+                        onOpenSettings = { viewModel.setTab(AppTab.SETTINGS) },
+                        onOpenCreateBuyerDialog = viewModel::openCreateBuyerDialog,
+                        onDeleteBuyer = viewModel::deleteBuyerUser,
+                        onSwitchToBuyer = { id, name ->
+                            viewModel.switchToUser(id, name)
+                        }
                     )
                 }
 
@@ -397,10 +422,17 @@ fun ProductSellerApp(
                     AccountSettingsScreen(
                         user = loggedInUser,
                         settings = appSettings ?: com.example.data.model.AppSettingsEntity(),
+                        buyers = buyers,
                         onOpenAuthDialog = viewModel::openAuthDialog,
                         onLogout = viewModel::logoutUser,
                         onUpdateProfile = viewModel::updateUserProfile,
-                        onUpdateSettings = viewModel::updateAppSettings
+                        onUpdateSettings = viewModel::updateAppSettings,
+                        onOpenCreateBuyerDialog = viewModel::openCreateBuyerDialog,
+                        onDeleteBuyer = viewModel::deleteBuyerUser,
+                        onSwitchToBuyer = { id, name ->
+                            viewModel.switchToUser(id, name)
+                        },
+                        onShopProducts = { viewModel.setTab(AppTab.SHOP) }
                     )
                 }
             }
@@ -451,6 +483,9 @@ fun ProductSellerApp(
             onLogin = { username, password, callback ->
                 viewModel.loginUser(username, password, callback)
             },
+            onResetPassword = { email, newPassword, callback ->
+                viewModel.resetPasswordByEmail(email, newPassword, callback)
+            },
             onRegister = { username, email, password, fullName, storeName, telegram, phone, bio, callback ->
                 viewModel.registerUser(
                     username = username,
@@ -480,6 +515,7 @@ fun ProductSellerApp(
             discountAmount = discount,
             estimatedTax = estimatedTax,
             totalAmount = total,
+            currentUser = loggedInUser,
             onDismiss = viewModel::closeCheckoutModal,
             onConfirmOrder = { name, address, paymentMethod ->
                 viewModel.placeOrder(
@@ -488,6 +524,25 @@ fun ProductSellerApp(
                     paymentMethod = paymentMethod,
                     cartItems = cartItems,
                     totalAmount = total
+                )
+            }
+        )
+    }
+
+    // Create Buyer User Dialog (Admin feature)
+    if (uiState.isCreateBuyerDialogOpen) {
+        CreateBuyerDialog(
+            onDismiss = viewModel::closeCreateBuyerDialog,
+            onCreateBuyer = { fullName, username, email, password, phone, address, loginImmediately, callback ->
+                viewModel.createBuyerUser(
+                    fullName = fullName,
+                    username = username,
+                    email = email,
+                    password = password,
+                    phoneNumber = phone,
+                    shippingAddress = address,
+                    loginImmediately = loginImmediately,
+                    onResult = callback
                 )
             }
         )

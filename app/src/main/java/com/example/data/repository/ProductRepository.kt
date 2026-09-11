@@ -28,6 +28,7 @@ class ProductRepository(
     val listedProducts: Flow<List<ProductEntity>> = productDao.getListedProducts()
     val allOrders: Flow<List<OrderEntity>> = orderDao.getAllOrders()
     val loggedInUser: Flow<UserEntity?> = userDao.getLoggedInUser()
+    val allBuyers: Flow<List<UserEntity>> = userDao.getAllBuyers()
     val appSettings: Flow<AppSettingsEntity?> = appSettingsDao.getSettings()
 
     val cartItemsWithProduct: Flow<List<CartItemWithProduct>> = combine(
@@ -147,13 +148,94 @@ class ProductRepository(
     }
 
     suspend fun authenticateUser(identifier: String, password: String): UserEntity? {
-        val user = userDao.authenticate(identifier.trim(), password)
+        val trimmedIdentifier = identifier.trim()
+        val user = userDao.authenticate(trimmedIdentifier, password)
         if (user != null) {
             userDao.logoutAllUsers()
             userDao.setLoggedIn(user.id)
             return user.copy(isLoggedIn = true)
         }
+
+        // Support admin login with Admin175 or prasith1980@gmail.com and password @1234567
+        val isAdminIdentifier = trimmedIdentifier.equals("Admin175", ignoreCase = true) ||
+                trimmedIdentifier.equals("prasith1980@gmail.com", ignoreCase = true) ||
+                trimmedIdentifier.equals("admin", ignoreCase = true) ||
+                trimmedIdentifier.equals("admin@apexstore.com", ignoreCase = true)
+
+        if (isAdminIdentifier && password == "@1234567") {
+            val existing = userDao.findExistingUser("prasith1980@gmail.com", "Admin175")
+                ?: userDao.findExistingUser("admin@apexstore.com", "admin")
+            if (existing != null) {
+                val updatedAdmin = existing.copy(
+                    username = "Admin175",
+                    email = "prasith1980@gmail.com",
+                    password = "@1234567",
+                    isLoggedIn = true
+                )
+                userDao.logoutAllUsers()
+                userDao.updateUser(updatedAdmin)
+                userDao.setLoggedIn(updatedAdmin.id)
+                return updatedAdmin
+            } else {
+                val adminUser = UserEntity(
+                    username = "Admin175",
+                    email = "prasith1980@gmail.com",
+                    password = "@1234567",
+                    fullName = "Store Admin",
+                    storeName = "Apex Studio Store",
+                    telegramUsername = "apex_support",
+                    phoneNumber = "+1 (555) 234-5678",
+                    bio = "Official Store Administrator & Inventory Curator.",
+                    isLoggedIn = true
+                )
+                userDao.logoutAllUsers()
+                val newId = userDao.insertUser(adminUser)
+                return adminUser.copy(id = newId)
+            }
+        }
+
         return null
+    }
+
+    suspend fun resetPasswordByEmail(email: String, newPassword: String): Pair<Boolean, String> {
+        val cleanEmail = email.trim()
+        val isAuthorizedEmail = cleanEmail.equals("prasith1980@gmail.com", ignoreCase = true) ||
+                cleanEmail.equals("admin@apexstore.com", ignoreCase = true)
+
+        if (!isAuthorizedEmail) {
+            val existing = userDao.findExistingUser(cleanEmail, "")
+            if (existing == null) {
+                return Pair(false, "No administrator found matching this email address.")
+            }
+        }
+
+        val adminUser = userDao.findExistingUser("prasith1980@gmail.com", "Admin175")
+            ?: userDao.findExistingUser("admin@apexstore.com", "admin")
+            ?: userDao.findExistingUser(cleanEmail, "")
+
+        if (adminUser != null) {
+            val updated = adminUser.copy(
+                email = "prasith1980@gmail.com",
+                username = "Admin175",
+                password = newPassword.ifBlank { "@1234567" }
+            )
+            userDao.updateUser(updated)
+            return Pair(true, "Password updated successfully for $cleanEmail.")
+        } else {
+            val newAdmin = UserEntity(
+                username = "Admin175",
+                email = "prasith1980@gmail.com",
+                password = newPassword.ifBlank { "@1234567" },
+                fullName = "Store Admin",
+                storeName = "Apex Studio Store",
+                telegramUsername = "apex_support",
+                phoneNumber = "+1 (555) 234-5678",
+                bio = "Official Store Administrator & Inventory Curator.",
+                isLoggedIn = false
+            )
+            userDao.insertUser(newAdmin)
+            return Pair(true, "Password updated successfully for $cleanEmail.")
+        }
     }
 
     suspend fun registerUser(
@@ -226,5 +308,68 @@ class ProductRepository(
 
     suspend fun getAppSettingsSync(): AppSettingsEntity {
         return appSettingsDao.getSettingsSync() ?: AppSettingsEntity()
+    }
+
+    suspend fun createBuyerUser(
+        fullName: String,
+        username: String,
+        email: String,
+        password: String,
+        phoneNumber: String,
+        shippingAddress: String,
+        loginImmediately: Boolean = false
+    ): Pair<Boolean, String> {
+        val cleanUsername = username.trim()
+        val cleanEmail = email.trim()
+
+        if (cleanUsername.isBlank()) {
+            return Pair(false, "Please enter a valid username for the buyer.")
+        }
+        if (cleanEmail.isBlank()) {
+            return Pair(false, "Please enter a valid email address.")
+        }
+        if (password.isBlank()) {
+            return Pair(false, "Please enter a password for the buyer.")
+        }
+
+        val existing = userDao.findExistingUser(cleanEmail, cleanUsername)
+        if (existing != null) {
+            return Pair(false, "A user with username '$cleanUsername' or email '$cleanEmail' already exists.")
+        }
+
+        val buyerUser = UserEntity(
+            username = cleanUsername,
+            email = cleanEmail,
+            password = password,
+            fullName = fullName.trim().ifBlank { cleanUsername },
+            storeName = "Customer",
+            telegramUsername = cleanUsername,
+            phoneNumber = phoneNumber.trim().ifBlank { "+1 (555) 000-0000" },
+            bio = "Registered buyer account.",
+            role = "BUYER",
+            shippingAddress = shippingAddress.trim().ifBlank { "Standard Delivery Address" },
+            isLoggedIn = loginImmediately
+        )
+
+        if (loginImmediately) {
+            userDao.logoutAllUsers()
+        }
+
+        val newId = userDao.insertUser(buyerUser)
+        if (loginImmediately) {
+            userDao.setLoggedIn(newId)
+        }
+
+        return Pair(true, "Buyer account for '${buyerUser.fullName}' created successfully! They can now log in and buy products.")
+    }
+
+    suspend fun deleteBuyerUser(userId: Long): Pair<Boolean, String> {
+        userDao.deleteUser(userId)
+        return Pair(true, "Buyer account deleted successfully.")
+    }
+
+    suspend fun switchToUser(userId: Long) {
+        userDao.logoutAllUsers()
+        userDao.setLoggedIn(userId)
     }
 }
